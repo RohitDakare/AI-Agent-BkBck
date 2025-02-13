@@ -5,6 +5,15 @@ import { getGeminiResponse } from '../lib/gemini';
 import { v4 as uuidv4 } from 'uuid';
 import { debounce } from '../lib/utils';
 
+const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.preventDefault();
+    e.preventDefault();
+    e.preventDefault();
+    e.preventDefault();
+    e.preventDefault();
+    e.preventDefault();
+
 interface Message {
   role: 'assistant' | 'user';
   content: string;
@@ -123,7 +132,8 @@ export default function Chat() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const debouncedHandleSubmit = debounce(handleSubmit, 300);
+
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
