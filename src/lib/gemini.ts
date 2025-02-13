@@ -1,5 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+declare global {
+  interface ImportMeta {
+    env: {
+      VITE_GEMINI_API_KEY: string;
+    }
+  }
+}
+
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
 const SYSTEM_PROMPT = `You are BKBCK Assistant, an advanced AI helper for B.K. Birla College.
