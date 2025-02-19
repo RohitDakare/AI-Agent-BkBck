@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { debounce } from '../lib/utils';
 import { Send, Bot, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,7 @@ export default function Chat() {
     loadChatHistory();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(debounce(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
@@ -92,7 +93,33 @@ export default function Chat() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, 300), [input, isLoading]);
+
+  // Optimize message rendering
+  const MemoizedMessage = useCallback(({ message, index }: { message: Message, index: number }) => (
+    <div
+      key={index}
+      className={`flex ${
+        message.role === 'assistant' ? 'justify-start' : 'justify-end'
+      }`}
+    >
+      <div
+        className={`flex gap-2 max-w-[80%] ${
+          message.role === 'assistant'
+            ? 'bg-secondary'
+            : 'bg-primary text-primary-foreground'
+        } p-3 rounded-lg`}
+      >
+        {message.role === 'assistant' && (
+          <Bot className="w-5 h-5 flex-shrink-0" />
+        )}
+        <p className="whitespace-pre-wrap">{message.content}</p>
+        {message.role === 'user' && (
+          <User className="w-5 h-5 flex-shrink-0" />
+        )}
+      </div>
+    </div>
+  ), []);
 
   return (
     <Card className="fixed bottom-4 right-4 w-96 h-[600px] flex flex-col shadow-xl">
@@ -106,28 +133,7 @@ export default function Chat() {
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`flex ${
-                message.role === 'assistant' ? 'justify-start' : 'justify-end'
-              }`}
-            >
-              <div
-                className={`flex gap-2 max-w-[80%] ${
-                  message.role === 'assistant'
-                    ? 'bg-secondary'
-                    : 'bg-primary text-primary-foreground'
-                } p-3 rounded-lg`}
-              >
-                {message.role === 'assistant' && (
-                  <Bot className="w-5 h-5 flex-shrink-0" />
-                )}
-                <p className="whitespace-pre-wrap">{message.content}</p>
-                {message.role === 'user' && (
-                  <User className="w-5 h-5 flex-shrink-0" />
-                )}
-              </div>
-            </div>
+            <MemoizedMessage key={index} message={message} index={index} />
           ))}
           {isLoading && (
             <div className="flex justify-start">

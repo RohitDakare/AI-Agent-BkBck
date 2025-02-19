@@ -1,7 +1,3 @@
-export function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
-}
-
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
