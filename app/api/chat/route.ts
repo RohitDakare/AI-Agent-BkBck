@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from 'redis';
 import { supabase } from '../../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -11,19 +12,43 @@ interface ChatResponse {
   response: string;
 }
 
-// Cache responses in memory for faster retrieval
-const responseCache = new Map<string, { response: string, timestamp: number }>();
+// Initialize Redis client
+const redisClient = createClient({
+  url: process.env.REDIS_URL
+});
+
+(async () => {
+  await redisClient.connect();
+})();
+
+// Async cache cleanup
+const cleanupCache = async () => {
+  try {
+    const keys = await redisClient.keys('*');
+    const now = Date.now();
+    
+    for (const key of keys) {
+      const cached = await redisClient.hGetAll(key);
+      if (cached.timestamp && now - parseInt(cached.timestamp) > 60000) {
+        await redisClient.del(key);
+      }
+    }
+  } catch (error) {
+    console.error('Cache cleanup error:', error);
+  }
+};
 
 export async function POST(req: Request) {
   try {
     const { message, sessionId } = await req.json();
     const currentSessionId = sessionId || uuidv4();
-
-    // Check cache first
     const cacheKey = `${currentSessionId}:${message}`;
-    const cachedResponse = responseCache.get(cacheKey);
+
+    // Check Redis cache first
+    const cachedResponse = await redisClient.hGetAll(cacheKey);
     
-    if (cachedResponse && Date.now() - cachedResponse.timestamp < 60000) {
+    if (cachedResponse.response && cachedResponse.timestamp && 
+        Date.now() - parseInt(cachedResponse.timestamp) < 60000) {
       return NextResponse.json({
         response: cachedResponse.response,
         sessionId: currentSessionId
@@ -47,20 +72,16 @@ export async function POST(req: Request) {
     const response = matches?.response || 
       "I'm not sure about that. Could you please rephrase your question or ask about admissions, courses, or facilities?";
 
-    // Cache the response
-    responseCache.set(cacheKey, {
+    // Cache the response in Redis
+    await redisClient.hSet(cacheKey, {
       response,
-      timestamp: Date.now()
+      timestamp: Date.now().toString()
     });
 
-    // Clear old cache entries periodically
-    if (responseCache.size > 1000) {
-      const now = Date.now();
-      for (const [key, value] of responseCache.entries()) {
-        if (now - value.timestamp > 60000) {
-          responseCache.delete(key);
-        }
-      }
+    // Schedule async cache cleanup if needed
+    const cacheSize = await redisClient.dbSize();
+    if (cacheSize > 1000) {
+      cleanupCache();
     }
 
     return NextResponse.json({ 

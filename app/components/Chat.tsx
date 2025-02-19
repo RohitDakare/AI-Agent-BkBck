@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { debounce } from '../lib/utils';
 import { Send, Bot, User } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card } from '@/components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { Card } from '../../components/ui/card';
 
 interface Message {
   role: 'assistant' | 'user';
@@ -25,14 +25,15 @@ export default function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
+  // Load chat history on mount
   useEffect(() => {
-    // Load previous chat history if session exists
     const loadChatHistory = async () => {
       const storedSessionId = localStorage.getItem('chatSessionId');
       if (storedSessionId) {
@@ -52,6 +53,7 @@ export default function Chat() {
     loadChatHistory();
   }, []);
 
+  // Optimized message submission handler
   const handleSubmit = useCallback(debounce(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -93,33 +95,35 @@ export default function Chat() {
     } finally {
       setIsLoading(false);
     }
-  }, 300), [input, isLoading]);
+  }, 100), [input, isLoading]);
 
-  // Optimize message rendering
-  const MemoizedMessage = useCallback(({ message, index }: { message: Message, index: number }) => (
-    <div
-      key={index}
-      className={`flex ${
-        message.role === 'assistant' ? 'justify-start' : 'justify-end'
-      }`}
-    >
+  // Optimized message component
+  const MemoizedMessage = useMemo(() => 
+    React.memo(({ message, index }: { message: Message, index: number }) => (
       <div
-        className={`flex gap-2 max-w-[80%] ${
-          message.role === 'assistant'
-            ? 'bg-secondary'
-            : 'bg-primary text-primary-foreground'
-        } p-3 rounded-lg`}
+        key={index}
+        className={`flex ${
+          message.role === 'assistant' ? 'justify-start' : 'justify-end'
+        }`}
       >
-        {message.role === 'assistant' && (
-          <Bot className="w-5 h-5 flex-shrink-0" />
-        )}
-        <p className="whitespace-pre-wrap">{message.content}</p>
-        {message.role === 'user' && (
-          <User className="w-5 h-5 flex-shrink-0" />
-        )}
+        <div
+          className={`flex gap-2 max-w-[80%] ${
+            message.role === 'assistant'
+              ? 'bg-secondary'
+              : 'bg-primary text-primary-foreground'
+          } p-3 rounded-lg`}
+        >
+          {message.role === 'assistant' && (
+            <Bot className="w-5 h-5 flex-shrink-0" />
+          )}
+          <p className="whitespace-pre-wrap">{message.content}</p>
+          {message.role === 'user' && (
+            <User className="w-5 h-5 flex-shrink-0" />
+          )}
+        </div>
       </div>
-    </div>
-  ), []);
+    ))
+  , []);
 
   return (
     <Card className="fixed bottom-4 right-4 w-96 h-[600px] flex flex-col shadow-xl">

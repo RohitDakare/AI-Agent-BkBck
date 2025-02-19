@@ -1,18 +1,28 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import redis
 import json
 import os
+import asyncio
+from typing import Dict, Any
 
 app = FastAPI()
 
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Initialize Redis
+redis_client = redis.Redis(
+    host=os.getenv('REDIS_HOST', 'localhost'),
+    port=int(os.getenv('REDIS_PORT', 6379)),
+    db=0
 )
 
 class ChatMessage(BaseModel):
@@ -40,38 +50,54 @@ knowledge_base = {
 def get_response(message: str) -> str:
     message = message.lower()
     
-    # Simple keyword matching
-    if "admission" in message:
-        if "process" in message:
-            return knowledge_base["admissions"]["process"]
-        elif "requirement" in message:
-            return knowledge_base["admissions"]["requirements"]
-        elif "deadline" in message:
-            return knowledge_base["admissions"]["deadlines"]
-        return "What specific information about admissions would you like to know?"
+    # Check Redis cache first
+    cached_response = redis_client.get(message)
+    if cached_response:
+        return cached_response.decode('utf-8')
     
-    elif "course" in message or "program" in message:
-        if "duration" in message:
-            return knowledge_base["courses"]["duration"]
-        elif "credit" in message:
-            return knowledge_base["courses"]["credits"]
-        return knowledge_base["courses"]["programs"]
+    # More efficient keyword matching using sets
+    keywords = set(message.split())
+    admissions_keywords = {'admission', 'apply', 'application'}
+    courses_keywords = {'course', 'program', 'degree'}
+    facilities_keywords = {'facility', 'library', 'lab', 'sport'}
     
-    elif "facility" in message or "facilities" in message:
-        if "library" in message:
-            return knowledge_base["facilities"]["library"]
-        elif "lab" in message:
-            return knowledge_base["facilities"]["labs"]
-        elif "sport" in message:
-            return knowledge_base["facilities"]["sports"]
-        return "We have various facilities including a library, labs, and sports facilities. What would you like to know about specifically?"
+    if keywords & admissions_keywords:
+        if 'process' in keywords:
+            response = knowledge_base["admissions"]["process"]
+        elif 'requirement' in keywords:
+            response = knowledge_base["admissions"]["requirements"]
+        elif 'deadline' in keywords:
+            response = knowledge_base["admissions"]["deadlines"]
+        else:
+            response = "What specific information about admissions would you like to know?"
+    elif keywords & courses_keywords:
+        if 'duration' in keywords:
+            response = knowledge_base["courses"]["duration"]
+        elif 'credit' in keywords:
+            response = knowledge_base["courses"]["credits"]
+        else:
+            response = knowledge_base["courses"]["programs"]
+    elif keywords & facilities_keywords:
+        if 'library' in keywords:
+            response = knowledge_base["facilities"]["library"]
+        elif 'lab' in keywords:
+            response = knowledge_base["facilities"]["labs"]
+        elif 'sport' in keywords:
+            response = knowledge_base["facilities"]["sports"]
+        else:
+            response = "We have various facilities including a library, labs, and sports facilities. What would you like to know about specifically?"
+    else:
+        response = "I'm not sure about that. Could you please rephrase your question or ask about admissions, courses, or facilities?"
     
-    return "I'm not sure about that. Could you please rephrase your question or ask about admissions, courses, or facilities?"
+    # Cache the response
+    redis_client.set(message, response, ex=3600)  # Cache for 1 hour
+    
+    return response
 
 @app.post("/chat")
 async def chat(message: ChatMessage):
     try:
-        response = get_response(message.message)
+        response = await asyncio.to_thread(get_response, message.message)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
