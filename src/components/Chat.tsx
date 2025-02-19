@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import Message from './Message';
+import { debounce } from '../lib/utils';
 import { Send, Bot, User, Maximize2, Minimize2, RefreshCw, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getGeminiResponse } from '../lib/gemini';
@@ -50,8 +52,41 @@ const CHAT_DIMENSIONS = {
 };
 
 export default function Chat() {
+  const typingIndicatorStyles = `
+    .typing-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      background-color: #3b82f6;
+      border-radius: 50%;
+      animation: typing 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    @keyframes typing {
+      0%, 60%, 100% {
+        transform: translateY(0);
+      }
+      30% {
+        transform: translateY(-6px);
+      }
+    }
+  `;
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
+  const [debouncedInput, setDebouncedInput] = useState('');
+
+  const handleInputChange = useCallback(debounce((value: string) => {
+    setDebouncedInput(value);
+  }, 300), []);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -183,7 +218,9 @@ export default function Chat() {
   const currentDimensions = isExpanded ? dimensions.expanded : dimensions.default;
 
   return (
-    <motion.div 
+    <div>
+      <style>{typingIndicatorStyles}</style>
+      <motion.div 
       ref={chatRef}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -242,34 +279,11 @@ export default function Chat() {
       >
         <AnimatePresence>
           {messages.map((message, index) => (
-            <motion.div
+            <Message
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'} mb-4`}
-            >
-              <div
-                className={`flex gap-2 max-w-[90%] sm:max-w-[85%] ${
-                  message.role === 'assistant'
-                    ? 'bg-gradient-to-br from-white to-blue-50 shadow-md'
-                    : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white'
-                } p-3 sm:p-4 rounded-lg ${
-                  message.role === 'assistant' ? 'rounded-tl-none' : 'rounded-tr-none'
-                }`}
-              >
-                {message.role === 'assistant' && (
-                  <Bot className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-1" />
-                )}
-                <div className="text-sm sm:text-base prose prose-sm max-w-none">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                </div>
-                {message.role === 'user' && (
-                  <User className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-1" />
-                )}
-              </div>
-            </motion.div>
+              role={message.role}
+              content={message.content}
+            />
           ))}
         </AnimatePresence>
         
@@ -279,8 +293,13 @@ export default function Chat() {
             animate={{ opacity: 1, y: 0 }}
             className="flex justify-start"
           >
-            <div className="bg-gradient-to-br from-white to-blue-50 p-3 sm:p-4 rounded-lg rounded-tl-none shadow-md">
-              <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+            <div className="bg-gradient-to-br from-white to-blue-50 p-3 sm:p-4 rounded-lg rounded-tl-none shadow-md flex items-center gap-2">
+              <div className="typing-indicator">
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+              </div>
+              <span className="text-sm text-blue-600">Typing...</span>
             </div>
           </motion.div>
         )}
@@ -292,7 +311,10 @@ export default function Chat() {
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              handleInputChange(e.target.value);
+            }}
             placeholder="Ask about admissions, courses, facilities..."
             disabled={isLoading}
             className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-blue-200 rounded-lg 
@@ -316,5 +338,6 @@ export default function Chat() {
         </div>
       </form>
     </motion.div>
+    </div>
   );
 }

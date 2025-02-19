@@ -1,12 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { LRUCache } from 'lru-cache';
 
-declare global {
-  interface ImportMeta {
-    env: {
-      VITE_GEMINI_API_KEY: string;
-    }
-  }
-}
+// Cache with 100 item limit and 5 minute TTL
+const responseCache = new LRUCache<string, string>({
+  max: 100,
+  ttl: 1000 * 60 * 5
+});
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
@@ -37,6 +36,12 @@ Remember: Your goal is to assist students, parents, and visitors in understandin
 
 export async function getGeminiResponse(message: string) {
   try {
+    // Check cache first
+    const cachedResponse = responseCache.get(message);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
     
     const prompt = `${SYSTEM_PROMPT}
@@ -55,7 +60,12 @@ Please provide a clear, helpful response that directly addresses the query while
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    const responseText = response.text();
+    
+    // Cache the response
+    responseCache.set(message, responseText);
+    
+    return responseText;
   } catch (error) {
     console.error('Gemini API error:', error);
     throw error;
