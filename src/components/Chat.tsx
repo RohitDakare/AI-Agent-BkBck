@@ -1,11 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Message from './Message';
-import { debounce } from '../lib/utils';
-import { Send, Bot, User, Maximize2, Minimize2, RefreshCw, Loader2 } from 'lucide-react';
+import { Send, Bot, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getGeminiResponse } from '../lib/gemini';
 import { v4 as uuidv4 } from 'uuid';
-import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Message {
@@ -82,11 +80,10 @@ export default function Chat() {
   `;
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
-  const [debouncedInput, setDebouncedInput] = useState('');
-
-  const handleInputChange = useCallback(debounce((value: string) => {
-    setDebouncedInput(value);
-  }, 300), []);
+  
+  const handleInputChange = (value: string) => {
+    setInput(value);
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
