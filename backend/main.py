@@ -8,8 +8,13 @@ import json
 import os
 from utils.scraper import CollegeScraper
 
+# Add these imports
+from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
+
 app = FastAPI()
 scraper = CollegeScraper()
+executor = ThreadPoolExecutor(max_workers=4)  # For parallel processing
 
 # Enable CORS
 app.add_middleware(
@@ -36,47 +41,45 @@ class ChatMessage(BaseModel):
     message: str
     session_id: Optional[str] = None
 
-async def get_college_info(query: str) -> str:
+@lru_cache(maxsize=1000)
+def process_query(query: str) -> str:
     # Get information from the scraper
     college_info = scraper.get_college_info()
     
     if not college_info:
         return "I apologize, but I'm having trouble accessing the college information. Please try again later."
 
-    # Simple keyword matching
-    query = query.lower()
+    # Optimized keyword matching using sets
+    query_words = set(query.lower().split())
     
-    if any(word in query for word in ['about', 'college', 'institution']):
+    about_keywords = {'about', 'college', 'institution', 'address', 'location'}
+    if query_words & about_keywords:
         return college_info['about']
     
-    if any(word in query for word in ['course', 'program', 'degree']):
-        courses = college_info['courses']
-        return "Available courses: " + ", ".join(courses)
+    course_keywords = {'course', 'program', 'degree', 'study', 'education'}
+    if query_words & course_keywords:
+        return "Available courses: " + ", ".join(college_info['courses'])
     
-    if any(word in query for word in ['admission', 'apply', 'enroll']):
+    admission_keywords = {'admission', 'apply', 'enroll', 'join', 'register'}
+    if query_words & admission_keywords:
         admissions = college_info['admissions']
         return f"Admission Process: {admissions['process']}\nRequirements: {admissions['requirements']}\nDeadlines: {admissions['deadlines']}"
     
-    if any(word in query for word in ['facility', 'infrastructure', 'amenity']):
-        facilities = college_info['facilities']
-        return "College facilities include: " + ", ".join(facilities)
+    facility_keywords = {'facility', 'infrastructure', 'amenity', 'campus'}
+    if query_words & facility_keywords:
+        return "College facilities include: " + ", ".join(college_info['facilities'])
 
     return "I apologize, but I couldn't find specific information about that. Please try asking about our courses, admissions, facilities, or general information about the college."
 
 @app.post("/chat")
 async def chat(message: ChatMessage):
     try:
-        # Check cache first
-        cached_response = await redis.get(message.message)
-        if cached_response:
-            return {"response": cached_response}
-
-        # Get response from college information
-        response = await get_college_info(message.message)
-        
-        # Cache the response
-        await redis.set(message.message, response, ex=3600)  # Cache for 1 hour
-        
+        # Process query in thread pool for non-blocking operation
+        response = await asyncio.get_event_loop().run_in_executor(
+            executor, 
+            process_query, 
+            message.message
+        )
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
