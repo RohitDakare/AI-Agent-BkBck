@@ -2,50 +2,96 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from functools import lru_cache
+from supabase import create_client, Client
+import os
 
 class CollegeScraper:
     def __init__(self):
-        self.base_url = "https://bkbck.edu.in"
-        self.college_address = "Birla College Campus Rd, Gauripada, Kalyan, Maharashtra 421301"
-        self.cache_timeout = 3600  # 1 hour cache
+        self.supabase_url = os.getenv('https://okyogpnugkodivswzllg.supabase.co')
+        self.supabase_key = os.getenv('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9reW9ncG51Z2tvZGl2c3d6bGxnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkzODMxNjMsImV4cCI6MjA1NDk1OTE2M30.XdjZLoXR9Vtg1aLVhKohuK1tnBVcQimXmbMTm3N5C_A')
+        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        self.cache = {}
 
-    @lru_cache(maxsize=128)
-    def get_page_content(self, url):
+    async def get_college_info(self):
         try:
-            response = requests.get(url, timeout=5)  # Add timeout
-            response.raise_for_status()
-            return BeautifulSoup(response.content, 'html.parser')
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
-            return None
+            # Fetch data from Supabase knowledge_base table
+            response = self.supabase.table('knowledge_base').select("*").execute()
+            
+            if not response.data:
+                return self._get_fallback_info()
 
-    def get_college_info(self):
-        # Pre-defined information for faster response
+            # Organize the data by category
+            organized_data = {
+                'about': [],
+                'courses': [],
+                'admissions': [],
+                'facilities': [],
+                'programs': [],
+                'policies': [],
+                'contact': []
+            }
+
+            for item in response.data:
+                category = item['category']
+                if category in organized_data:
+                    organized_data[category].append({
+                        'topic': item['topic'],
+                        'content': item['content']
+                    })
+
+            return {
+                'about': self._format_about(organized_data['about']),
+                'courses': self._format_courses(organized_data['programs']),
+                'admissions': self._format_admissions(organized_data['admissions']),
+                'facilities': self._format_facilities(organized_data['facilities']),
+                'policies': self._format_policies(organized_data['policies']),
+                'contact': self._format_contact(organized_data['contact'])
+            }
+        except Exception as e:
+            print(f"Error fetching data from Supabase: {e}")
+            return self._get_fallback_info()
+
+    def _format_about(self, data):
+        about_info = next((item for item in data if item['topic'] == 'about'), None)
+        return about_info['content'] if about_info else "Information about B.K. Birla College"
+
+    def _format_courses(self, data):
+        courses = []
+        for program in data:
+            if program['topic'] in ['ba_programs', 'bsc_programs', 'bcom_programs', 'ma_programs', 'msc_programs']:
+                courses.extend(self._extract_courses_from_content(program['content']))
+        return courses
+
+    def _format_admissions(self, data):
         return {
-            'about': f"B.K. Birla College is located at {self.college_address}. It is a premier educational institution committed to academic excellence and holistic development.",
-            'courses': [
-                "Bachelor of Science (BSc)",
-                "Bachelor of Commerce (BCom)",
-                "Bachelor of Arts (BA)",
-                "Bachelor of Management Studies (BMS)",
-                "Master of Science (MSc)",
-                "Master of Commerce (MCom)",
-                "PhD Programs"
-            ],
+            'process': next((item['content'] for item in data if item['topic'] == 'process'), ''),
+            'requirements': next((item['content'] for item in data if item['topic'] == 'eligibility_ug'), ''),
+            'deadlines': next((item['content'] for item in data if item['topic'] == 'deadlines'), '')
+        }
+
+    def _format_facilities(self, data):
+        facilities = []
+        for facility in data:
+            facilities.extend(self._extract_facilities_from_content(facility['content']))
+        return facilities
+
+    def _extract_courses_from_content(self, content):
+        return [line.strip('- ') for line in content.split('\n') if line.strip().startswith('-')]
+
+    def _extract_facilities_from_content(self, content):
+        return [line.strip('- ') for line in content.split('\n') if line.strip().startswith('-')]
+
+    def _get_fallback_info(self):
+        # Fallback information in case of database connection issues
+        return {
+            'about': "B.K. Birla College is located at Birla College Campus Rd, Gauripada, Kalyan, Maharashtra 421301",
+            'courses': ["Please contact the college for current course offerings"],
             'admissions': {
-                'process': "1. Online Application 2. Document Verification 3. Merit List 4. Payment of Fees",
-                'requirements': "1. 10+2 Certificate 2. Entrance Exam Scores 3. Identity Proof 4. Address Proof",
-                'deadlines': "Regular Admission: June-July | Management Quota: Based on Availability"
+                'process': "Please visit the college website for admission process",
+                'requirements': "Please contact admission office for requirements",
+                'deadlines': "Please check college website for current deadlines"
             },
-            'facilities': [
-                "Modern Laboratories",
-                "Digital Library",
-                "Sports Complex",
-                "Research Centers",
-                "Cafeteria",
-                "Wi-Fi Campus",
-                "Auditorium"
-            ]
+            'facilities': ["Please visit the college for facility information"]
         }
 
     def _extract_about(self):
