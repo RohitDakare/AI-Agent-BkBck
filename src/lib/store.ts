@@ -19,23 +19,18 @@ interface ChatState {
   setExpanded: (expanded: boolean) => void;
 }
 
-export const useChatStore = create<ChatState>(
-  persist(
-    (set) => ({
-      messages: [],
-      isLoading: false,
-      isExpanded: false,
-      setMessages: (messages) => set({ messages }),
-      addMessage: (message) =>
-        set((state) => ({
-          messages: [...state.messages, message],
-        })),
-      clearMessages: () => set({ messages: [] }),
-      setLoading: (loading) => set({ isLoading: loading }),
-      setExpanded: (expanded) => set({ isExpanded: expanded }),
-    }),
-    {
-      name: 'chat-store',
-    }
-  )
-);
+export const useChatStore = create<ChatState>()(persist((set) => ({
+  messages: [],
+  isLoading: false,
+  isExpanded: false,
+  setMessages: (messages) => set({ messages }),
+  addMessage: (message) =>
+    set((state) => ({
+      messages: [...state.messages, message],
+    })),
+  clearMessages: () => set({ messages: [] }),
+  setLoading: (loading) => set({ isLoading: loading }),
+  setExpanded: (expanded) => set({ isExpanded: expanded }),
+}), {
+  name: 'chat-store',
+}))
