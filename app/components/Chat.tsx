@@ -1,27 +1,16 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { debounce } from '../lib/utils';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Card } from '../../components/ui/card';
-
-interface Message {
-  role: 'assistant' | 'user';
-  content: string;
-}
+import { useSupabaseChat } from '@/hooks/use-supabase-chat';
 
 export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: 'Hello! I\'m your college virtual assistant. How can I help you today?',
-    },
-  ]);
+  const { messages, isLoading, error, sendMessage, loadChatHistory } = useSupabaseChat();
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -34,96 +23,22 @@ export default function Chat() {
 
   // Load chat history on mount
   useEffect(() => {
-    const loadChatHistory = async () => {
-      const storedSessionId = localStorage.getItem('chatSessionId');
-      if (storedSessionId) {
-        setSessionId(storedSessionId);
-        try {
-          const response = await fetch('/api/chat/history?sessionId=' + storedSessionId);
-          const data = await response.json();
-          if (data.messages) {
-            setMessages(data.messages);
-          }
-        } catch (error) {
-          console.error('Failed to load chat history:', error);
-        }
-      }
-    };
-
-    loadChatHistory();
+    const storedSessionId = localStorage.getItem('chatSessionId');
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+      loadChatHistory(storedSessionId);
+    }
   }, []);
 
-  // Optimized message submission handler
-  const handleSubmit = useCallback(debounce(async (e: React.FormEvent<HTMLFormElement>) => {
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = input.trim();
+    const message = input.trim();
     setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          message: userMessage,
-          sessionId: sessionId
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (data.sessionId && !sessionId) {
-        setSessionId(data.sessionId);
-        localStorage.setItem('chatSessionId', data.sessionId);
-      }
-
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.response }]);
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Sorry, I encountered an error. Please try again later.',
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, 100), [input, isLoading]);
-
-  // Optimized message component
-  const MemoizedMessage = useMemo(() => 
-    React.memo(({ message, index }: { message: Message, index: number }) => (
-      <div
-        key={index}
-        className={`flex ${
-          message.role === 'assistant' ? 'justify-start' : 'justify-end'
-        }`}
-      >
-        <div
-          className={`flex gap-2 max-w-[80%] ${
-            message.role === 'assistant'
-              ? 'bg-secondary'
-              : 'bg-primary text-primary-foreground'
-          } p-3 rounded-lg`}
-        >
-          {message.role === 'assistant' && (
-            <Bot className="w-5 h-5 flex-shrink-0" />
-          )}
-          <p className="whitespace-pre-wrap">{message.content}</p>
-          {message.role === 'user' && (
-            <User className="w-5 h-5 flex-shrink-0" />
-          )}
-        </div>
-      </div>
-    ))
-  , []);
+    await sendMessage(message, sessionId);
+  };
 
   return (
     <Card className="fixed bottom-4 right-4 w-96 h-[600px] flex flex-col shadow-xl">
