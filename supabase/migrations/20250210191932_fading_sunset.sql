@@ -126,7 +126,7 @@ Eligibility: B.Sc. in relevant subject. Duration: 2 years'),
 - Research ethics guidelines'),
 
 ('contact', 'information', 'Contact Information:
-Address: Birla College Road, Kalyan, Maharashtra 421304
+Address: Birla College Campus Rd, Gauripada, Kalyan, Maharashtra 421301
 Phone: 0251 223 1294
 Email: admissionhelpdesk@bkbirlacollegekalyan.com
 Website: www.bkbirlacollegekalyan.com
